@@ -1,5 +1,7 @@
-# Modified by Yunqiu Xu
-# Combined with GAN
+#!/usr/bin/env python
+
+# COMP9517 Project: Real-time Face Swapping with One Target Image
+# Author: Yunqiu Xu, Qihai Shuai, Shaoshen Wang
 
 import dlib
 import cv2
@@ -22,9 +24,7 @@ from torchvision.transforms import ToTensor
 # Load the keypoint detection model, target image and 3D model
 predictor_path = "shape_predictor_68_face_landmarks.dat"
 image_name = "Trump.jpg"
-# image_name = "JimCarrey.jpg"
-# image_name = "JGL.jpeg"
-maxImageSizeForDetection = 200 # if it's too small the face will not be detected
+maxImageSizeForDetection = 400
 detector = dlib.get_frontal_face_detector()
 predictor = dlib.shape_predictor(predictor_path)
 mean3DShape, blendshapes, mesh, idxs3D, idxs2D = utils.load3DFaceModel("candide.npz")
@@ -78,27 +78,14 @@ while True:
                     # Generate mouth
                     generated_image = sess.run(output_tensor, feed_dict={image_tensor: image_rgb})
                     generated_image = np.squeeze(generated_image) # 64 * 64 in RGB
-
-                    # TEST
-                    # print "1 passed"
-                    # print generated_image.shape
-
+                    
                     # Super resolution
                     testImg = Image.fromarray(generated_image)
                     img = testImg.convert('YCbCr')
                     y, cb, cr = img.split()
-
-                    # TEST
-                    # print img
-                    # print "2 passed"
-
                     sr_input = Variable(ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
                     out = sr_model(sr_input)
                     sr_output = out.cpu()
-
-                    # TEST
-                    # print "3 passed"
-
                     out_img_y = sr_output.data[0].numpy()
                     out_img_y *= 255.0
                     out_img_y = out_img_y.clip(0, 255)
@@ -109,8 +96,8 @@ while True:
                     out_img = np.array(out_img)
                     image_bgr = cv2.cvtColor(np.squeeze(out_img), cv2.COLOR_RGB2BGR)
                     image_bgr = cv2.resize(image_bgr, (image_bgr.shape[1] / 3, image_bgr.shape[0] / 3))
+                    image_bgr[image_bgr < 15] = 0
 
-                    print image_bgr[1,1]
                     # Remap generated mouth to original size and position
                     remapped_mouth = gan_func.setMouth(cameraImg, image_bgr, mouth_leftup_coord, m_size) # Put generated mouth back to renderedImg
 
@@ -119,16 +106,10 @@ while True:
                     remapped_mouth = ImageProcessing.colorTransfer(cameraImg, remapped_mouth, mask_mouth)
                     cameraImg = ImageProcessing.blendImages(remapped_mouth, cameraImg, mask_mouth)
 
-                    # TEST
-                    print "SR for mouth is finished!"
-
                 except:
                     pass
             else:
                 try:
-                    # Blend remapped mouth with original frame
-                    # mask_mouth = np.copy(remapped_mouth[:,:,0])
-                    # remapped_mouth = ImageProcessing.colorTransfer(cameraImg, remapped_mouth, mask_mouth)
                     cameraImg = ImageProcessing.blendImages(remapped_mouth, cameraImg, mask_mouth)
                 except:
                     pass
@@ -154,24 +135,6 @@ while True:
                     cameraImg = ImageProcessing.blendImages(renderedImg, cameraImg, mask_renderedImg)
                 except:
                     pass
-
-            # Super resolution of the whole frame
-            # testImg = cv2.cvtColor(cameraImg, cv2.COLOR_BGR2RGB)
-            # testImg = Image.fromarray(testImg)
-            # img = testImg.convert('YCbCr')
-            # y, cb, cr = img.split()
-            # input = Variable(ToTensor()(y)).view(1, -1, y.size[1], y.size[0])
-            # out = sr_model(input)
-            # out = out.cpu()
-            # out_img_y = out.data[0].numpy()
-            # out_img_y *= 255.0
-            # out_img_y = out_img_y.clip(0, 255)
-            # out_img_y = Image.fromarray(np.uint8(out_img_y[0]), mode='L')
-            # out_img_cb = cb.resize(out_img_y.size, Image.BICUBIC)
-            # out_img_cr = cr.resize(out_img_y.size, Image.BICUBIC)
-            # out_img = Image.merge('YCbCr', [out_img_y, out_img_cb, out_img_cr]).convert('RGB')
-            # cameraImg = np.array(out_img)
-            # cameraImg = cv2.cvtColor(cameraImg, cv2.COLOR_RGB2BGR)
 
     t1 = time()    
     cv2.putText(cameraImg, 'FPS: '+str(1 / (t1 - t0))[:4].strip('.'), (8,20), cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0,0,255), 2)
